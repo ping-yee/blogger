@@ -6,6 +6,7 @@ use App\Controllers\BaseController;
 use App\Models\V1\TodoListsModel;
 use CodeIgniter\API\ResponseTrait;
 use App\Entities\TodoListsEntity;
+use CodeIgniter\Validation\ValidationInterface;
 
 class TodoController extends BaseController
 {
@@ -18,10 +19,19 @@ class TodoController extends BaseController
      */
     protected TodoListsModel $todoListsModel;
 
+    /**
+     * validation instance.
+     *
+     * @var ValidationInterface
+     */
+    private ValidationInterface $validation;
+
     public function __construct()
     {
         $this->todoListsModel = new TodoListsModel();
+        $this->validation = \Config\Services::validation();
     }
+
     /**
      * [Get] /todo
      * Get all todo list data.
@@ -31,8 +41,8 @@ class TodoController extends BaseController
     public function index()
     {
         // Find the data from database.
-        $todoList = $this->todoListsModel->where("m_key",$this->userData["key"])
-                                         ->findAll();
+        $todoList = $this->todoListsModel->where("m_key", $this->userData["key"])
+            ->findAll();
 
         $returnData = [];
 
@@ -44,12 +54,12 @@ class TodoController extends BaseController
                 'key'     => $todo->t_key,
             ];
         }
-    
+
         return $this->respond([
             "msg"  => "success",
             "data" => $returnData
         ]);
-}
+    }
 
     /**
      * [GET] /todo/{key}
@@ -64,8 +74,8 @@ class TodoController extends BaseController
         }
 
         // Find the data from database.
-        $todo = $this-> todoListsModel->where("m_key", $this->userData["key"])
-                                      ->find($key);
+        $todo = $this->todoListsModel->where("m_key", $this->userData["key"])
+            ->find($key);
 
         if ($todo === null) {
             return $this->failNotFound("Todo is not found.");
@@ -92,15 +102,21 @@ class TodoController extends BaseController
      */
     public function create()
     {
+        // 設置驗證規則
+        $rules = [
+            'title' => 'required|min_length[3]',
+            'content' => 'required'
+        ];
+
+        // 驗證資料
+        if (!$this->validate($rules)) {
+            return $this->fail($this->validation->getErrors(), 400);
+        }
+
         // Get the data from request.
         $data    = $this->request->getJSON();
-        $title   = $data->title   ?? null;
-        $content = $data->content ?? null;
-
-        // Check if account and password is correct.
-        if (empty($title) || empty($content)) {
-            return $this->fail("Pass in data is not found.", 404);
-        }
+        $title   = $data->title;
+        $content = $data->content;
 
         // Create a new entity instance and populate it.
         $todo = new TodoListsEntity();
@@ -113,12 +129,11 @@ class TodoController extends BaseController
         if (!$this->todoListsModel->save($todo)) {
             return $this->fail("Create failed.");
         }
-        else{
-            $todoListData = [
-                'title'   => $todo->t_title,
-                'content' => $todo->t_content
-            ];
-        }
+
+        $todoListData = [
+            'title'   => $todo->t_title,
+            'content' => $todo->t_content
+        ];
 
         $this->clearCache($this->userData["key"]);
 
@@ -136,6 +151,17 @@ class TodoController extends BaseController
      */
     public function update(?int $key = null)
     {
+        // 設置驗證規則
+        $rules = [
+            'title' => 'permit_empty|min_length[3]',
+            'content' => 'permit_empty'
+        ];
+
+        // 驗證資料
+        if (!$this->validate($rules)) {
+            return $this->fail($this->validation->getErrors(), 400);
+        }
+
         // Get the  data from request.
         $data    = $this->request->getJSON();
         $title   = $data->title   ?? null;
@@ -146,7 +172,7 @@ class TodoController extends BaseController
         }
 
         // Get the will update data.
-        $willUpdateData = $this-> todoListsModel->where(
+        $willUpdateData = $this->todoListsModel->where(
             "m_key",
             $this->userData["key"]
         )->find($key);
@@ -190,7 +216,7 @@ class TodoController extends BaseController
 
         // Find the existing entity.
         $todo = $this->todoListsModel->where(
-            'm_key', 
+            'm_key',
             $this->userData["key"]
         )->find($key);
 
@@ -206,7 +232,7 @@ class TodoController extends BaseController
         }
 
         $this->clearCache($this->userData["key"]);
-        
+
         return $this->respond([
             "msg" => "Delete successfully"
         ]);
