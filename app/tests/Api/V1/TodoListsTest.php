@@ -262,4 +262,88 @@ class TodoListsTest extends DatabaseTestCase
 
         $this->assertEquals($excepted, (array)$returnData);
     }
+
+    public function testCreateTodoValidationError()
+    {
+        // Test missing title and content
+        $createData = [
+            "title"   => "", // Invalid title (required and min_length[3])
+            "content" => "", // Invalid content (required)
+        ];
+
+        $results = $this->withSession($this->sessionData)
+            ->withBodyFormat('json')
+            ->post("api/v1/todo", $createData);
+
+        $returnData = json_decode($results->getJSON(), true);
+
+        // Check validation errors
+        $this->assertEquals('400', $returnData['status']);
+        $this->assertEquals('400', $returnData['error']);
+        $this->assertEquals('The title field is required.', $returnData['messages']['title']);
+        $this->assertEquals('The content field is required.', $returnData['messages']['content']);
+    }
+
+    public function testUpdateTodoValidationError()
+    {
+        $todoListsModel = new TodoListsModel();
+
+        $createData = [
+            "t_title"   => "Example Title",
+            "t_content" => "Example Content",
+            "m_key"     => 1,
+        ];
+
+        $todo = new TodoListsEntity($createData);
+
+        $createdKey = $todoListsModel->save($todo);
+        $this->assertTrue($createdKey);
+
+        $this->seeInDatabase('TodoLists', [
+            "t_title"   => $createData["t_title"],
+            "t_content" => $createData["t_content"],
+            "m_key"     => $createData["m_key"],
+        ]);
+
+        // Test updating with invalid title and content
+        $updatedData = [
+            "title"   => "Ex", // Invalid title (min_length[3])
+            "content" => "",   // Invalid content (required)
+        ];
+
+        $results = $this->withSession($this->sessionData)
+            ->withBodyFormat('json')
+            ->put("api/v1/todo/1", $updatedData);
+
+        $returnData = json_decode($results->getJSON(), true);
+
+        // Check validation errors
+        $this->assertEquals('400', $returnData['status']);
+        $this->assertEquals('400', $returnData['error']);
+        $this->assertEquals('The title field must be at least 3 characters in length.', $returnData['messages']['title']);
+        $this->assertEquals('The content field is required.', $returnData['messages']['content']);
+    }
+
+    public function testUpdateTodoNotFoundError()
+    {
+        // Test updating a non-existing todo
+        $updatedData = [
+            "title"   => "Updated Title",
+            "content" => "Updated Content",
+        ];
+
+        $results = $this->withSession($this->sessionData)
+            ->withBodyFormat('json')
+            ->put("api/v1/todo/9999", $updatedData);
+
+        // $results->assertStatus(404);
+
+        $returnData = json_decode($results->getJSON(), true);
+
+        var_dump($returnData);
+
+        $this->assertArrayHasKey('message', $returnData);
+        $this->assertEquals('This data is not found.', $returnData['message']);
+    }
+
 }
